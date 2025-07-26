@@ -176,17 +176,13 @@ def retirar_produto():
         escolha = input("Escolha: ").strip()
         if escolha == "1":
             for _, prod in combinacao.iterrows():
-                try:
-                    qtd = float(input(f"Quantos deseja retirar de '{prod['Descrição']}' (estoque: {prod['Quantidade']})? "))
-                    if qtd <= 0 or qtd > prod["Quantidade"]:
-                        print("Quantidade inválida.")
-                        return
-                    novo_estoque = prod["Quantidade"] - qtd
-                    atualizar_estoque_html(soup, prod["Código"], novo_estoque)
-                    salvar_retirado(prod, qtd)
-                except ValueError:
-                    print("Quantidade inválida.")
+                qtd_retirar = 1
+                if prod["Quantidade"] < 1:
+                    print(f"Estoque insuficiente para '{prod['Descrição']}'. Operação cancelada.")
                     return
+                novo_estoque = prod["Quantidade"] - qtd_retirar
+                atualizar_estoque_html(soup, prod["Código"], novo_estoque)
+                salvar_retirado(prod, qtd_retirar)
             print("Produtos retirados com sucesso.")
             return
         elif escolha == "0":
