@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import os
 import itertools
+import random
 
 CAMINHO_PRODUTOS = "produtos.html"
 CAMINHO_RETIRADOS = "retirados.csv"
@@ -58,17 +59,21 @@ def buscar_combinacao_produtos(df, preco_desejado, tolerancia=0.4, max_produtos=
                 return df_filtrado.loc[list(comb)]
     return None
 
-def buscar_combinacao_gulosa(df, preco_desejado, tolerancia=0.4, max_produtos=4, usados=set()):
+def buscar_combinacao_gulosa(df, preco_desejado, tolerancia=0.4, max_produtos=10, usados=set()):
+    # Embaralha os produtos para tentar combinações diferentes a cada chamada
     df_filtrado = df[(df["Margem Lucro"] > 0) & (df["Quantidade"] >= 1)].copy()
     df_filtrado = df_filtrado[~df_filtrado["Código"].isin(usados)]
+    df_filtrado = df_filtrado.sample(frac=1).reset_index(drop=True)  # embaralha
     combinacao = []
     valor_restante = preco_desejado
 
     for _ in range(max_produtos):
-        if df_filtrado.empty:
+        # Só considera produtos com preço menor ou igual ao valor restante + tolerancia
+        candidatos = df_filtrado[df_filtrado["Preço Venda"] <= valor_restante + tolerancia].copy()
+        if candidatos.empty:
             break
-        df_filtrado["Diferenca"] = (df_filtrado["Preço Venda"] - valor_restante).abs()
-        produto = df_filtrado.sort_values("Diferenca").iloc[0]
+        candidatos["Diferenca"] = (candidatos["Preço Venda"] - valor_restante).abs()
+        produto = candidatos.sort_values("Diferenca").iloc[0]
         combinacao.append(produto)
         valor_restante -= produto["Preço Venda"]
         df_filtrado = df_filtrado[df_filtrado["Código"] != produto["Código"]]
@@ -76,7 +81,7 @@ def buscar_combinacao_gulosa(df, preco_desejado, tolerancia=0.4, max_produtos=4,
             break
 
     total = sum(prod["Preço Venda"] for prod in combinacao)
-    if abs(preco_desejado - total) <= tolerancia and len(combinacao) > 1:
+    if abs(preco_desejado - total) <= tolerancia and len(combinacao) > 0:
         return pd.DataFrame(combinacao)
     return None
 
