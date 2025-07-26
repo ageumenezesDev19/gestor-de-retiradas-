@@ -2,6 +2,7 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from datetime import datetime
 import os
+import itertools
 
 CAMINHO_PRODUTOS = "produtos.html"
 CAMINHO_RETIRADOS = "retirados.csv"
@@ -41,6 +42,43 @@ def buscar_produto_proximo(df, preco_desejado):
         return None
     df_filtrado["Diferenca"] = (df_filtrado["Preço Venda"] - preco_desejado).abs()
     return df_filtrado.sort_values("Diferenca").iloc[0]
+
+def buscar_combinacao_produtos(df, preco_desejado, tolerancia=0.4, max_produtos=4, usados=set()):
+    # Considere até 40 produtos mais próximos do valor desejado
+    df_filtrado = df[(df["Margem Lucro"] > 0) & (df["Quantidade"] >= 1)].copy()
+    df_filtrado = df_filtrado[~df_filtrado["Código"].isin(usados)]
+    df_filtrado["Diferenca"] = (df_filtrado["Preço Venda"] - preco_desejado).abs()
+    df_filtrado = df_filtrado.sort_values("Diferenca").head(40)
+    indices = list(df_filtrado.index)
+    for n in range(2, max_produtos+1):  # Comece de 2 produtos para evitar solução trivial
+        for comb in itertools.combinations(indices, n):
+            total = df_filtrado.loc[list(comb), "Preço Venda"].sum()
+            dif = abs(total - preco_desejado)
+            if dif <= tolerancia:
+                return df_filtrado.loc[list(comb)]
+    return None
+
+def buscar_combinacao_gulosa(df, preco_desejado, tolerancia=0.4, max_produtos=4, usados=set()):
+    df_filtrado = df[(df["Margem Lucro"] > 0) & (df["Quantidade"] >= 1)].copy()
+    df_filtrado = df_filtrado[~df_filtrado["Código"].isin(usados)]
+    combinacao = []
+    valor_restante = preco_desejado
+
+    for _ in range(max_produtos):
+        if df_filtrado.empty:
+            break
+        df_filtrado["Diferenca"] = (df_filtrado["Preço Venda"] - valor_restante).abs()
+        produto = df_filtrado.sort_values("Diferenca").iloc[0]
+        combinacao.append(produto)
+        valor_restante -= produto["Preço Venda"]
+        df_filtrado = df_filtrado[df_filtrado["Código"] != produto["Código"]]
+        if abs(valor_restante) <= tolerancia:
+            break
+
+    total = sum(prod["Preço Venda"] for prod in combinacao)
+    if abs(preco_desejado - total) <= tolerancia and len(combinacao) > 1:
+        return pd.DataFrame(combinacao)
+    return None
 
 def atualizar_estoque_html(soup, codigo, nova_quantidade):
     for linha in soup.find_all("tr"):
@@ -91,52 +129,67 @@ def retirar_produto():
     except ValueError:
         print("Entrada inválida.")
         return
-    produtos = buscar_produtos_proximos(df, preco, n=3)
-    if produtos is None or produtos.empty:
-        print("Nenhum produto com margem > 0 e estoque > 0 foi encontrado.")
-        return
 
-    print("\nProdutos mais próximos encontrados:\n")
-    for idx, (_, produto) in enumerate(produtos.iterrows(), 1):
-        print(f"[{idx}] Código: {produto['Código']} | Descrição: {produto['Descrição']} | Preço Venda: R$ {produto['Preço Venda']:.2f} | Estoque: {produto['Quantidade']}")
+    usados = set()
+    while True:
+        produto = buscar_produto_proximo(df, preco)
+        if produto is not None and abs(produto["Preço Venda"] - preco) <= 0.4:
+            print(f"\nProduto encontrado próximo ao valor desejado:")
+            print(f"Código: {produto['Código']} | Descrição: {produto['Descrição']} | Preço Venda: R$ {produto['Preço Venda']:.2f} | Estoque: {produto['Quantidade']}")
+            escolha = input("\nDeseja retirar este produto? [1] Sim [0] Buscar combinação [2] Cancelar: ").strip()
+            if escolha == "1":
+                try:
+                    qtd = float(input("Quantos deseja retirar? "))
+                    if qtd <= 0 or qtd > produto["Quantidade"]:
+                        print("Quantidade inválida.")
+                        return
+                    novo_estoque = produto["Quantidade"] - qtd
+                    atualizar_estoque_html(soup, produto["Código"], novo_estoque)
+                    salvar_retirado(produto, qtd)
+                    print(f"{qtd} unidade(s) de '{produto['Descrição']}' retirada(s) com sucesso.")
+                except ValueError:
+                    print("Quantidade inválida.")
+                return
+            elif escolha == "0":
+                usados.add(produto["Código"])
+            else:
+                print("Operação cancelada.")
+                return
 
-    try:
-        escolha = int(input("\nQual produto deseja selecionar? (1, 2 ou 3): ").strip())
-        if escolha not in [1, 2, 3] or escolha > len(produtos):
-            print("Opção inválida.")
+        # Busca combinação gulosa
+        combinacao = buscar_combinacao_gulosa(df, preco, tolerancia=0.4, usados=usados)
+        if combinacao is None or combinacao.empty:
+            print("Nenhuma combinação encontrada para o valor desejado.")
             return
-        produto = produtos.iloc[escolha - 1]
-    except ValueError:
-        print("Opção inválida.")
-        return
-
-    print(f"\nProduto selecionado:\n")
-    print(f"Código       : {produto['Código']}")
-    print(f"Descrição    : {produto['Descrição']}")
-    print(f"Preço Venda  : R$ {produto['Preço Venda']:.2f}")
-    print(f"Margem Lucro : {produto['Margem Lucro']}%")
-    print(f"Estoque      : {produto['Quantidade']}")
-    print("\nDeseja retirar este produto do estoque?")
-    print("[1] Sim")
-    print("[2] Não")
-    escolha = input("Escolha (1 ou 2): ").strip()
-    if escolha != "1":
-        print("Produto não retirado.")
-        return
-    try:
-        qtd = float(input("Quantos deseja retirar? "))
-        if qtd <= 0:
-            print("Quantidade inválida.")
+        print("\nCombinação de produtos encontrada próxima ao valor desejado:")
+        total = 0
+        for idx, (_, prod) in enumerate(combinacao.iterrows(), 1):
+            print(f"[{idx}] Código: {prod['Código']} | Descrição: {prod['Descrição']} | Preço Venda: R$ {prod['Preço Venda']:.2f} | Estoque: {prod['Quantidade']}")
+            total += prod["Preço Venda"]
+        print(f"Total: R$ {total:.2f} (Diferença: R$ {abs(total-preco):.2f})")
+        print("\n[1] Retirar todos\n[0] Buscar outra combinação\n[2] Cancelar")
+        escolha = input("Escolha: ").strip()
+        if escolha == "1":
+            for _, prod in combinacao.iterrows():
+                try:
+                    qtd = float(input(f"Quantos deseja retirar de '{prod['Descrição']}' (estoque: {prod['Quantidade']})? "))
+                    if qtd <= 0 or qtd > prod["Quantidade"]:
+                        print("Quantidade inválida.")
+                        return
+                    novo_estoque = prod["Quantidade"] - qtd
+                    atualizar_estoque_html(soup, prod["Código"], novo_estoque)
+                    salvar_retirado(prod, qtd)
+                except ValueError:
+                    print("Quantidade inválida.")
+                    return
+            print("Produtos retirados com sucesso.")
             return
-        if qtd > produto["Quantidade"]:
-            print("Quantidade maior que o estoque disponível.")
+        elif escolha == "0":
+            usados.update(combinacao["Código"])
+            continue
+        else:
+            print("Operação cancelada.")
             return
-        novo_estoque = produto["Quantidade"] - qtd
-        atualizar_estoque_html(soup, produto["Código"], novo_estoque)
-        salvar_retirado(produto, qtd)
-        print(f"{qtd} unidade(s) de '{produto['Descrição']}' retirada(s) com sucesso.")
-    except ValueError:
-        print("Erro: valor inválido.")
 
 def main():
     print("O que deseja fazer?")
