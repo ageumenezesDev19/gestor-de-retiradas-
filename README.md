@@ -21,3 +21,11 @@ Sistema simples para identificar e retirar produtos do estoque a partir de um ar
    ```sh
    python3 main.py
    ```
+
+
+## Estrutura dos arquivos
+
+- **main.py**: Responsável pelo menu principal e inicialização do sistema.
+- **db_utils.py**: Funções para manipulação de arquivos, leitura e escrita de dados (HTML e CSV).
+- **busca.py**: Lógica de busca e combinação de produtos para atingir o valor desejado.
+- **estoque.py**: Fluxo principal de interação com o usuário, retirada de produtos e exibição de retiradas.

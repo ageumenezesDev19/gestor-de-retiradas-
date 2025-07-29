@@ -3,3 +3,4 @@ __pycache__/
 .env
 produtos.html
 retirados.csv
+.vscode/
