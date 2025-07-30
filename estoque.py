@@ -1,7 +1,7 @@
 from db_utils import (
     carregar_dados_html, tratar_dados, atualizar_estoque_html, salvar_retirado, CAMINHO_PRODUTOS
 )
-from busca import buscar_produto_proximo, buscar_combinacao_gulosa
+from busca import buscar_produto_proximo, buscar_combinacao_gulosa, buscar_combinacao_exaustiva
 from blacklist_utils import load_blacklist
 import pandas as pd
 import os
@@ -63,6 +63,9 @@ def retirar_produto():
                 return
 
         combinacao = buscar_combinacao_gulosa(df, preco, tolerancia=0.4, usados=usados, blacklist=blacklist)
+        if combinacao is None or combinacao.empty:
+            # tenta exaustiva se a gulosa falhar
+            combinacao = buscar_combinacao_exaustiva(df, preco, tolerancia=0.4, max_produtos=5, usados=usados, blacklist=blacklist)
         if combinacao is None or combinacao.empty:
             print("Nenhuma combinação encontrada para o valor desejado.")
             return
