@@ -2,6 +2,7 @@ from db_utils import (
     carregar_dados_html, tratar_dados, atualizar_estoque_html, salvar_retirado, CAMINHO_PRODUTOS
 )
 from busca import buscar_produto_proximo, buscar_combinacao_gulosa
+from blacklist_utils import load_blacklist
 import pandas as pd
 import os
 
@@ -35,8 +36,9 @@ def retirar_produto():
         return
 
     usados = set()
+    blacklist = load_blacklist()
     while True:
-        produto = buscar_produto_proximo(df, preco)
+        produto = buscar_produto_proximo(df, preco, blacklist=blacklist)
         if produto is not None and abs(produto["Preço Venda"] - preco) <= 0.4:
             print(f"\nProduto encontrado próximo ao valor desejado:")
             print(f"Código: {produto['Código']} | Descrição: {produto['Descrição']} | Preço Venda: R$ {produto['Preço Venda']:.2f} | Estoque: {produto['Quantidade']}")
@@ -60,7 +62,7 @@ def retirar_produto():
                 print("Operação cancelada.")
                 return
 
-        combinacao = buscar_combinacao_gulosa(df, preco, tolerancia=0.4, usados=usados)
+        combinacao = buscar_combinacao_gulosa(df, preco, tolerancia=0.4, usados=usados, blacklist=blacklist)
         if combinacao is None or combinacao.empty:
             print("Nenhuma combinação encontrada para o valor desejado.")
             return
