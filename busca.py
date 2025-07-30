@@ -9,15 +9,25 @@ def buscar_produtos_proximos(df, preco_desejado, n=3):
     df_filtrado["Diferenca"] = (df_filtrado["Preço Venda"] - preco_desejado).abs()
     return df_filtrado.sort_values("Diferenca").head(n)
 
-def buscar_produto_proximo(df, preco_desejado):
+def buscar_produto_proximo(df, preco_desejado, blacklist=None):
+    if blacklist is None:
+        blacklist = []
     df_filtrado = df[(df["Margem Lucro"] > 0) & (df["Quantidade"] >= 1)].copy()
+    # Aplica blacklist
+    for termo in blacklist:
+        df_filtrado = df_filtrado[~df_filtrado["Descrição"].str.contains(termo, case=False, na=False)]
     if df_filtrado.empty:
         return None
     df_filtrado["Diferenca"] = (df_filtrado["Preço Venda"] - preco_desejado).abs()
     return df_filtrado.sort_values("Diferenca").iloc[0]
 
-def buscar_combinacao_gulosa(df, preco_desejado, tolerancia=0.4, max_produtos=10, usados=set()):
+def buscar_combinacao_gulosa(df, preco_desejado, tolerancia=0.4, max_produtos=5, usados=set(), blacklist=None):
+    if blacklist is None:
+        blacklist = []
     df_filtrado = df[(df["Margem Lucro"] > 0) & (df["Quantidade"] >= 1)].copy()
+    # Aplica blacklist
+    for termo in blacklist:
+        df_filtrado = df_filtrado[~df_filtrado["Descrição"].str.contains(termo, case=False, na=False)]
     df_filtrado = df_filtrado[~df_filtrado["Código"].isin(usados)]
     df_filtrado = df_filtrado.sample(frac=1).reset_index(drop=True)
     combinacao = []

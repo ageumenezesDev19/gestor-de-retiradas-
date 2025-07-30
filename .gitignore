@@ -4,3 +4,4 @@ __pycache__/
 produtos.html
 retirados.csv
 .vscode/
+blacklist.txt
