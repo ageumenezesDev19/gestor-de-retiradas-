@@ -20,7 +20,7 @@ def buscar_produto_proximo(df, preco_desejado, blacklist=None):
     df_filtrado["Diferenca"] = (df_filtrado["Preço Venda"] - preco_desejado).abs()
     return df_filtrado.sort_values("Diferenca").iloc[0]
 
-def buscar_combinacao_gulosa(df, preco_desejado, tolerancia=0.4, max_produtos=7, usados=set(), blacklist=None):
+def buscar_combinacao_gulosa(df, preco_desejado, tolerancia=0.4, max_produtos=5, usados=set(), blacklist=None):
     if blacklist is None:
         blacklist = []
     df_filtrado = df[(df["Margem Lucro"] > 0) & (df["Quantidade"] >= 1)].copy()
